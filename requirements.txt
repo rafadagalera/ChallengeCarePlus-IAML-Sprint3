@@ -1,0 +1,10 @@
+scikit-learn>=1.4
+pandas>=2.0
+numpy>=1.26
+fastapi>=0.111
+uvicorn[standard]>=0.29
+requests>=2.31
+pydantic>=2.0
+matplotlib>=3.8
+seaborn>=0.13
+joblib>=1.4

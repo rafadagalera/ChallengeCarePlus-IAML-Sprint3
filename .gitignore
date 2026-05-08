@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+.env
+*.egg-info/
+dist/
+build/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# Data — raw/processed/models are generated at runtime
+data/raw/
+data/processed/
+data/models/
+
+# Generated plots
+docs/*.png
+
+# IDE
+.idea/
+.vscode/
+*.swp
