@@ -16,7 +16,8 @@ PROCESSED_DIR = Path(__file__).parents[2] / "data" / "processed"
 OFF_SEARCH = "https://world.openfoodfacts.org/cgi/search.pl"
 FIELDS = "code,product_name,nutriments,allergens_tags,food_groups_tags"
 PAGE_SIZE = 8
-SLEEP = 0.4  # seconds between requests to be polite
+SLEEP = 0.6          # seconds between requests
+MAX_RETRIES = 3      # retry on 5xx with exponential backoff
 HEADERS = {"User-Agent": "NutritionalScoreEngine/1.0 (educational; github.com/bcr)"}
 
 # Search terms grouped by food_group label
@@ -82,13 +83,23 @@ def _search(term: str) -> list[dict]:
         "fields": FIELDS,
         "sort_by": "unique_scans_n",
     }
-    try:
-        r = requests.get(OFF_SEARCH, params=params, headers=HEADERS, timeout=15)
-        r.raise_for_status()
-        return r.json().get("products", [])
-    except Exception as exc:
-        print(f"  [warn] search '{term}' failed: {exc}")
-        return []
+    for attempt in range(MAX_RETRIES):
+        try:
+            r = requests.get(OFF_SEARCH, params=params, headers=HEADERS, timeout=15)
+            r.raise_for_status()
+            return r.json().get("products", [])
+        except requests.exceptions.HTTPError as exc:
+            if r.status_code in (429, 503) and attempt < MAX_RETRIES - 1:
+                backoff = SLEEP * (2 ** attempt)
+                print(f"  [retry {attempt+1}/{MAX_RETRIES}] '{term}' → {r.status_code}, waiting {backoff:.1f}s")
+                time.sleep(backoff)
+            else:
+                print(f"  [warn] search '{term}' failed: {exc}")
+                return []
+        except Exception as exc:
+            print(f"  [warn] search '{term}' failed: {exc}")
+            return []
+    return []
 
 
 def _extract(product: dict, food_group: str) -> dict | None:
