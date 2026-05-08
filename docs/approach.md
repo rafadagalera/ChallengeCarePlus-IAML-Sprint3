@@ -224,9 +224,11 @@ Isso garante que a avaliação mede **generalização para novos indivíduos**, 
 
 | Métrica | Valor |
 |---|---|
-| MAE (test) | 0.1669 |
-| RMSE (test) | 0.3511 |
-| R² (test) | **0.9666** |
+| MAE (test) | 0.1995 |
+| RMSE (test) | 0.4084 |
+| R² (test) | **0.9691** |
+
+*Modelo treinado com 291 alimentos reais do Open Food Facts (291 000 pares).*
 
 ### 7.1 Interpretação esperada
 
