@@ -25,3 +25,6 @@ docs/*.png
 .idea/
 .vscode/
 *.swp
+
+# Claude Code internals
+.tmp_skills/
