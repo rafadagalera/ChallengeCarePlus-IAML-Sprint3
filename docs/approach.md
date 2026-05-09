@@ -12,9 +12,49 @@ A abordagem segue três pilares:
 
 ---
 
-## 2. Dados de Indivíduos
+## 2. Problema e o Papel da IA
 
-### 2.1 Features (11 campos)
+### 2.1 Contexto
+
+Estamos desenvolvendo um aplicativo de saúde e nutrição onde o usuário:
+
+1. **Cadastra seu perfil** — informações como idade, peso, altura, tipo de dieta, alergias, condições de saúde (hipertensão, diabetes), objetivos (emagrecimento, ganho muscular, etc.) e nível de atividade física.
+2. **Escaneia produtos** — via código de barras, o app consulta a base do Open Food Facts e adiciona o alimento à sua **dispensa digital**.
+3. **Recebe recomendações personalizadas** — o sistema indica quais alimentos da dispensa são mais adequados para o seu perfil naquele momento.
+
+O desafio central é: **dado um indivíduo com características únicas e um alimento com seu perfil nutricional, qual o grau de compatibilidade entre eles?**
+
+### 2.2 O que a IA faz
+
+A IA é o núcleo de decisão do sistema. Ela resolve o problema de compatibilidade nutricional personalizada através de um **modelo de regressão baseado em redes neurais (MLP — Multi-Layer Perceptron)**, treinado para aprender padrões complexos entre perfis de saúde e composição nutricional.
+
+**Fluxo de inferência:**
+
+```
+Perfil do usuário  ─┐
+                    ├─► Preprocessamento ─► MLP (128→64→32) ─► Score 0–10
+Nutrição do alimento ─┘
+```
+
+**O que o modelo aprende:**
+
+- Que alimentos ricos em sódio são inadequados para hipertensos
+- Que dietas cetogênicas penalizam alimentos com alto teor de carboidratos
+- Que alimentos com alta proteína beneficiam usuários com objetivo de ganho muscular
+- Que alérgenos são restrições absolutas (score = 0)
+- Dezenas de outras interações não-lineares entre saúde, dieta e nutrição
+
+**Por que IA e não regras fixas:**
+
+Uma lista de regras manuais não escala — cada nova condição de saúde, objetivo ou combinação de restrições multiplica exponencialmente os casos. O MLP generaliza para combinações nunca vistas durante o treinamento, atribuindo scores coerentes mesmo para perfis incomuns (ex: usuário vegano, pré-diabético, com objetivo de energia).
+
+**Resultado:** R² = 0.9691 no conjunto de teste, com MAE < 0.20 na escala 0–10.
+
+---
+
+## 3. Dados de Indivíduos
+
+### 3.1 Features (11 campos)
 
 | Campo | Tipo | Distribuição / Valores |
 |---|---|---|
@@ -31,7 +71,7 @@ A abordagem segue três pilares:
 | `glycemic_condition` | categórico | none 84%, pre_diabetic 10%, type_2 5%, type_1 1% — piorado por IMC alto |
 | `hypertension` | categórico | none 70%, controlled 20%, uncontrolled 10% — piorado por colesterol alto e idade |
 
-### 2.2 Correlações realistas
+### 3.2 Correlações realistas
 
 A geração não é totalmente independente. Exemplos de correlações intencionais:
 
@@ -41,26 +81,26 @@ A geração não é totalmente independente. Exemplos de correlações intencion
 - `restriction_low_sugar` é fortemente associada a `glycemic_condition`
 - `restriction_high_protein` é fortemente associada a `goal == muscle_gain`
 
-### 2.3 Arquivo gerado
+### 3.3 Arquivo gerado
 
 `data/processed/individuals.csv` — 1 000 linhas, 23 colunas
 
 ---
 
-## 3. Dados de Alimentos
+## 4. Dados de Alimentos
 
-### 3.1 Fonte
+### 4.1 Fonte
 
 **Open Food Facts** ([world.openfoodfacts.org](https://world.openfoodfacts.org))
 - API REST pública, sem chave de acesso
 - Cobertura: > 3 milhões de produtos globalmente
 - Endpoint utilizado: `GET /cgi/search.pl` com `action=process&json=1`
 
-### 3.2 Estratégia de coleta
+### 4.2 Estratégia de coleta
 
 Definimos 12 categorias de alimentos (`grain`, `legume`, `vegetable`, `fruit`, `dairy`, `meat`, `fish`, `egg`, `nut`, `processed`, `beverage`, `snack`) com 6–9 termos de busca por categoria. Para cada termo, coletamos até 8 produtos, filtramos os que têm valor calórico disponível, e limitamos a 25 por categoria.
 
-### 3.3 Features extraídas
+### 4.3 Features extraídas
 
 | Campo | Descrição | Unidade |
 |---|---|---|
@@ -77,21 +117,21 @@ Definimos 12 categorias de alimentos (`grain`, `legume`, `vegetable`, `fruit`, `
 | `is_meat` | carne | booleano |
 | `is_fish` | peixe/frutos do mar | booleano |
 
-### 3.4 Tratamento de valores ausentes
+### 4.4 Tratamento de valores ausentes
 
 Valores nutricionais ausentes são imputados pela **mediana do grupo** (ex: mediana de `proteins_100g` dentro de `grain`). Caso toda a categoria tenha valor ausente, usa-se a mediana global. Produtos sem valor calórico são descartados.
 
-### 3.5 Arquivo gerado
+### 4.5 Arquivo gerado
 
 `data/processed/foods.csv` — ~250 linhas, 20 colunas
 
 ---
 
-## 4. Função de Score Heurística
+## 5. Função de Score Heurística
 
 A função heurística gera os **labels de treino** (ground truth) para o modelo supervisionado. Ela simula o raciocínio de um nutricionista de forma parametrizada.
 
-### 4.1 Lógica (em pseudocódigo)
+### 5.1 Lógica (em pseudocódigo)
 
 ```
 score = 10.0
@@ -145,10 +185,10 @@ se restriction_high_protein e protein < 10g:     score -= 1.0
 se restriction_low_carb e carbs > 20g:           score -= 1.5
 
 score += N(0, 0.3)   # ruído realista
-score = clip(score, 0, 10)
+score = clip(scor, 0, 10)
 ```
 
-### 4.2 Distribuição dos scores gerados
+### 5.2 Distribuição dos scores gerados
 
 Com 1000 indivíduos × ~250 alimentos (~250 000 pares):
 - A distribuição é **multimodal**: pico em ~0 (pares incompatíveis) e pico em ~7-8 (pares compatíveis)
@@ -157,7 +197,7 @@ Com 1000 indivíduos × ~250 alimentos (~250 000 pares):
 
 ---
 
-## 5. Pipeline de Features
+## 6. Pipeline de Features
 
 O pipeline é implementado com `sklearn.compose.ColumnTransformer`:
 
@@ -180,9 +220,9 @@ O preprocessor é ajustado (`fit`) apenas nos dados de treino para evitar data l
 
 ---
 
-## 6. Arquitetura do MLP
+## 7. Arquitetura do MLP
 
-### 6.1 Configuração
+### 7.1 Configuração
 
 ```python
 MLPRegressor(
@@ -198,7 +238,7 @@ MLPRegressor(
 )
 ```
 
-### 6.2 Justificativas
+### 7.2 Justificativas
 
 | Escolha | Justificativa |
 |---|---|
@@ -208,7 +248,7 @@ MLPRegressor(
 | alpha=0.01 | Regularização moderada; o ruído σ=0.3 já suaviza o target |
 | Early stopping manual | Controle preciso sobre o val set (split por indivíduo) |
 
-### 6.3 Split de dados
+### 7.3 Split de dados
 
 O split é feito **por indivíduo**, não por par aleatório:
 
@@ -220,7 +260,7 @@ Isso garante que a avaliação mede **generalização para novos indivíduos**, 
 
 ---
 
-## 7. Resultados
+## 8. Resultados
 
 | Métrica | Valor |
 |---|---|
@@ -230,14 +270,14 @@ Isso garante que a avaliação mede **generalização para novos indivíduos**, 
 
 *Modelo treinado com 291 alimentos reais do Open Food Facts (291 000 pares).*
 
-### 7.1 Interpretação esperada
+### 8.1 Interpretação esperada
 
 Como o target é uma função quase-determinística (heurística + σ=0.3), espera-se:
 - **R² > 0.85**: o MLP aprende a função heurística com boa precisão
 - **MAE < 0.8**: erro médio de menos de 1 ponto na escala 0–10
 - Erros maiores em regiões de transição (ex: pares borderline entre score 0 e score 3)
 
-### 7.2 Gráficos gerados
+### 8.2 Gráficos gerados
 
 Salvos em `docs/`:
 - `evaluation_plots.png` — curva de loss, predicted vs actual, distribuição de resíduos
@@ -246,7 +286,7 @@ Salvos em `docs/`:
 
 ---
 
-## 8. Como Executar
+## 9. Como Executar
 
 ### Pré-requisitos
 
@@ -306,7 +346,7 @@ curl -X POST http://localhost:8000/score \
 
 ---
 
-## 9. Ferramentas Utilizadas
+## 10. Ferramentas Utilizadas
 
 | Ferramenta | Versão mínima | Papel |
 |---|---|---|
@@ -322,24 +362,10 @@ curl -X POST http://localhost:8000/score \
 
 ---
 
-## 10. Limitações e Próximos Passos
+## 11. Integrantes
 
-### Limitações do MVP
+### Rafael Nascimento - RM553117
+### Luis Alberto - RM553507
+### Beatriz Rocha - RM553455
+### Isabelle Torriceli - RM552806
 
-| Limitação | Impacto |
-|---|---|
-| Scores gerados por heurística | O modelo aprende uma função sintética, não dados clínicos reais |
-| Dados de alimentos podem ter campos ausentes | Imputação por mediana introduz viés em nutrientes raros |
-| Armazenamento de indivíduos em memória | Dados perdidos ao reiniciar a API |
-| Ausência de índice glicêmico | Relevante para controle glicêmico, não disponível no OFF |
-| Score único (0–10) | Não captura trade-offs multi-dimensionais |
-
-### Possíveis melhorias
-
-- **Dados clínicos reais**: usar datasets como NHANES (CDC) para treino mais fidedigno
-- **Índice glicêmico**: integrar base de dados dedicada (ex: Glycemic Index Foundation)
-- **Score multi-dimensional**: separar score por eixo (calórico, alérgico, macro, micro)
-- **Persistência**: substituir dict em memória por banco de dados (PostgreSQL, SQLite)
-- **Explicabilidade**: SHAP values para detalhar contribuição de cada feature
-- **Feedback de usuário**: coletar avaliações reais para fine-tuning do modelo
-- **Porções reais**: considerar quantidade consumida, não apenas por 100g
